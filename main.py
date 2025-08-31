@@ -9,9 +9,9 @@ from agents import Agent,Tool,FileSearchTool,Runner,input_guardrail,RunContextWr
 from openai import OpenAI
 
 
-
+texts=""
 class CheckInput(BaseModel):
-    relative_input:bool
+    relative_input_service_related_question:bool
 app = FastAPI()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
@@ -19,21 +19,16 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 async def check_service_related_question(ctx:RunContextWrapper,Agennts:Agent,input:str|TResponseInputItem):
     checking_agent=Agent(
         name="Gardrails Agents",
-      instructions = (
-          "You are a guardrail agent. "
-          "Check the user query. "
-          "- If the query is a greeting (hello, hi, thanks, how are you, etc.), allow it and set vector_store_related_query=True. "
-          "- If the query is about our services or products and  want user  data like working talk, allow it and set vector_store_related_query=True. "
-          "- If the query is unrelated or irrelevant, set vector_store_related_query=False."
-)
-       ,
+      instructions ="You are a guardrail agent for a website AI chatbot. Your job is to take the user’s input and decide whether the query is related to the website’s services or information.Set the variable relative_input_service_related_question = True if the user:Sends a greeting (hello, hi, thanks, how are you)Asks about the website’s services, workshops, products, pricing, or contact informationSet the variable vector_store_related_query = False if the query is irrelevant or unrelated to the website services, such as general knowledge questions, personal topics, or unrelated subjects.Do not provide answers. Only classify whether the query should be allowed or blocked based on its relevance."
+      ,
         output_type=CheckInput
     )
     results=await Runner.run(starting_agent=checking_agent,input=input)
-    if results.final_output.relative_input:
+    if results.final_output.relative_input_service_related_question:
         return GuardrailFunctionOutput(output_info="valid data",tripwire_triggered=False)
     else:
         return GuardrailFunctionOutput(output_info="invalid data",tripwire_triggered=True)
+
 
 @app.get("/")
 def home():
@@ -43,6 +38,8 @@ def home():
 
 @app.post("/chatbot")
 async def add_data(item:str):
+   
+   
     store_vector_ids=[]
     vector_stores = client.vector_stores.list()
 
@@ -53,8 +50,7 @@ async def add_data(item:str):
     # print(store_vector_ids)
     myagent=Agent(
         name="helpfull asistance",
-        instructions="You are a helpful agent. The user's data is stored in the vector store. If the user asks any question related to that stored data or about the user, retrieve the information from the vector store and answer smartly and clearly. Always give professional and relevant answers based only on the stored data.",
-
+        instructions="You are an AI chatbot. When the customer asks a question, retrieve  our relevant information from the vector store containing their website data, services, contact information, pricing, and address. Provide clear, professional, and logical answers that are on-point and relevant to the user’s query. Additionally, analyze the user’s input to understand how you can help them and suggest useful next steps, without giving overly long or detailed responses.",
         tools=[FileSearchTool(vector_store_ids=store_vector_ids,max_num_results=1)],
         input_guardrails=[check_service_related_question]
         )
